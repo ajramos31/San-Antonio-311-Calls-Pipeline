@@ -1,0 +1,107 @@
+{
+	"jobConfig": {
+		"name": "Bronze Ingestion",
+		"description": "",
+		"role": "arn:aws:iam::820440428419:role/service-role/AWSGlueServiceRole",
+		"command": "glueetl",
+		"version": "5.1",
+		"runtime": null,
+		"workerType": "G.1X",
+		"numberOfWorkers": "5",
+		"maxCapacity": 5,
+		"jobRunQueuingEnabled": false,
+		"maxRetries": 0,
+		"timeout": 480,
+		"maxConcurrentRuns": 1,
+		"security": "none",
+		"scriptName": "Bronze Ingestion.py",
+		"scriptLocation": "s3://aws-glue-assets-820440428419-us-east-2/scripts/",
+		"language": "python-3",
+		"spark": false,
+		"jobParameters": [],
+		"tags": [],
+		"jobMode": "NOTEBOOK_MODE",
+		"createdOn": "2026-05-13T19:04:15.941Z",
+		"developerMode": false,
+		"connectionsList": [],
+		"temporaryDirectory": "s3://aws-glue-assets-820440428419-us-east-2/temporary/",
+		"glueHiveMetastore": true,
+		"etlAutoTuning": false,
+		"pythonShellPrebuiltLibraryOption": "analytics",
+		"flexExecution": false,
+		"minFlexWorkers": null,
+		"sourceControlDetails": {
+			"Provider": "GITHUB",
+			"Repository": "San-Antonio-311-Calls-Pipeline",
+			"Branch": "main",
+			"Folder": ""
+		},
+		"maintenanceWindow": null,
+		"bookmark": "",
+		"metrics": "",
+		"observabilityMetrics": "",
+		"logging": "",
+		"sparkPath": "",
+		"serverEncryption": false,
+		"pythonPath": null,
+		"dependentPath": "",
+		"referencedPath": "",
+		"etlAutoScaling": false,
+		"etlAutoTuningJobRules": "",
+		"pythonVersion": ""
+	},
+	"hasBeenSaved": false,
+	"usageProfileName": null,
+	"script": "\nimport sys\nfrom awsglue.transforms import *\nfrom awsglue.utils import getResolvedOptions\nfrom pyspark.context import SparkContext\nfrom awsglue.context import GlueContext\nfrom awsglue.job import Job\n  \nsc = SparkContext.getOrCreate()\nglueContext = GlueContext(sc)\nspark = glueContext.spark_session\njob = Job(glueContext)\nimport requests\nfrom datetime import datetime, timedelta, timezone\nfrom dateutil.relativedelta import relativedelta\nimport pyspark.sql.functions as f\nfrom pyspark.sql.types import StructType, StructField, LongType, StringType\n\nurl='https://services.arcgis.com/g1fRTDLeMgspWrYp/arcgis/rest/services/311_All_Service_Calls/FeatureServer/0/query'\nmetaurl='https://services.arcgis.com/g1fRTDLeMgspWrYp/arcgis/rest/services/311_All_Service_Calls/FeatureServer/0?f=json'\n\nmresponse=requests.get(metaurl)\nmdata=mresponse.json()\n\npage_size=mdata.get('maxRecordCount', 1000)\ncallSchema = StructType([\n    StructField(\"CaseID\", LongType(), True),\n    StructField(\"CaseStatus\", StringType(), True),\n    StructField(\"Category\", StringType(), True),\n    StructField(\"ClosedDateTime\", LongType(), True),\n    StructField(\"CouncilDistrict\", LongType(), True),\n    StructField(\"Department\", StringType(), True),\n    StructField(\"LateYesNo\", StringType(), True),\n    StructField(\"OBJECTID\", LongType(), True),\n    StructField(\"ObjectDescription\", StringType(), True),\n    StructField(\"OpenedDateTime\", LongType(), True),\n    StructField(\"ReasonName\", StringType(), True),\n    StructField(\"ReportEndingDate\", LongType(), True),\n    StructField(\"ReportStartingDate\", LongType(), True),\n    StructField(\"SLADate\", LongType(), True),\n    StructField(\"SourceID\", StringType(), True),\n    StructField(\"TypeName\", StringType(), True),\n    StructField(\"XCOORD\", LongType(), True),\n    StructField(\"YCOORD\", LongType(), True)\n])\nmonths=12\nstartYear=datetime(2023,1,1)\ni=1\ncont=True\n\nwhile (startYear.year, startYear.month) <= (datetime.now().year, datetime.now().month) and cont: \n    nextMonth=startYear + relativedelta(months=1)\n    offset=0\n    print(f'processing {startYear} / {nextMonth}')\n    \n    while True: \n\n        params={\n            'where': f\"OpenedDateTime >= DATE '{startYear.strftime('%Y-%m-%d')}' AND OpenedDateTime < '{nextMonth.strftime('%Y-%m-%d')}'\",\n            'outFields': '*',\n            'f': 'json',\n            'resultOffset': offset,\n            'resultRecordCount': page_size\n        }\n        \n        \n        response=requests.get(url, params=params)\n        data=response.json()\n\n        features=data.get('features', [])\n        \n        if not features: \n            print('no features')\n            cont=False\n            break\n\n        attributes=[f.get('attributes',{}) for f in features]\n\n        df=spark.createDataFrame(attributes, schema=callSchema)\n        df=df.withColumn('opened_ts', f.to_timestamp(f.from_unixtime(f.col('OpenedDateTime')/1000))).withColumn('year_month', f.date_format(f.col('opened_ts'), 'yyyy-MM'))\n        df.write.mode('append').partitionBy('year_month').parquet('s3://sanantonio-311-calls/bronze/')\n        if not data.get('exceededTransferLimit', False): \n            break\n\n        offset+=len(features)\n        \n    startYear = startYear + relativedelta(months=1)\njob.commit()",
+	"notebook": {
+		"metadata": {
+			"kernelspec": {
+				"name": "glue_pyspark",
+				"display_name": "Glue PySpark",
+				"language": "python"
+			},
+			"language_info": {
+				"name": "Python_Glue_Session",
+				"mimetype": "text/x-python",
+				"codemirror_mode": {
+					"name": "python",
+					"version": 3
+				},
+				"pygments_lexer": "python3",
+				"file_extension": ".py"
+			}
+		},
+		"nbformat_minor": 4,
+		"nbformat": 4,
+		"cells": [
+			{
+				"cell_type": "code",
+				"source": "%idle_timeout 2880\n%glue_version 5.1\n%worker_type G.1X\n%number_of_workers 5\n\nimport sys\nfrom awsglue.transforms import *\nfrom awsglue.utils import getResolvedOptions\nfrom pyspark.context import SparkContext\nfrom awsglue.context import GlueContext\nfrom awsglue.job import Job\n  \nsc = SparkContext.getOrCreate()\nglueContext = GlueContext(sc)\nspark = glueContext.spark_session\njob = Job(glueContext)",
+				"metadata": {},
+				"execution_count": null,
+				"outputs": []
+			},
+			{
+				"cell_type": "code",
+				"source": "import requests\nfrom datetime import datetime, timedelta, timezone\nfrom dateutil.relativedelta import relativedelta\nimport pyspark.sql.functions as f\nfrom pyspark.sql.types import StructType, StructField, LongType, StringType\n\nurl='https://services.arcgis.com/g1fRTDLeMgspWrYp/arcgis/rest/services/311_All_Service_Calls/FeatureServer/0/query'\nmetaurl='https://services.arcgis.com/g1fRTDLeMgspWrYp/arcgis/rest/services/311_All_Service_Calls/FeatureServer/0?f=json'\n\nmresponse=requests.get(metaurl)\nmdata=mresponse.json()\n\npage_size=mdata.get('maxRecordCount', 1000)",
+				"metadata": {},
+				"execution_count": null,
+				"outputs": []
+			},
+			{
+				"cell_type": "code",
+				"source": "callSchema = StructType([\n    StructField(\"CaseID\", LongType(), True),\n    StructField(\"CaseStatus\", StringType(), True),\n    StructField(\"Category\", StringType(), True),\n    StructField(\"ClosedDateTime\", LongType(), True),\n    StructField(\"CouncilDistrict\", LongType(), True),\n    StructField(\"Department\", StringType(), True),\n    StructField(\"LateYesNo\", StringType(), True),\n    StructField(\"OBJECTID\", LongType(), True),\n    StructField(\"ObjectDescription\", StringType(), True),\n    StructField(\"OpenedDateTime\", LongType(), True),\n    StructField(\"ReasonName\", StringType(), True),\n    StructField(\"ReportEndingDate\", LongType(), True),\n    StructField(\"ReportStartingDate\", LongType(), True),\n    StructField(\"SLADate\", LongType(), True),\n    StructField(\"SourceID\", StringType(), True),\n    StructField(\"TypeName\", StringType(), True),\n    StructField(\"XCOORD\", LongType(), True),\n    StructField(\"YCOORD\", LongType(), True)\n])",
+				"metadata": {},
+				"execution_count": null,
+				"outputs": []
+			},
+			{
+				"cell_type": "code",
+				"source": "months=12\nstartYear=datetime(2023,1,1)\ni=1\ncont=True\n\nwhile (startYear.year, startYear.month) <= (datetime.now().year, datetime.now().month) and cont: \n    nextMonth=startYear + relativedelta(months=1)\n    offset=0\n    print(f'processing {startYear} / {nextMonth}')\n    \n    while True: \n\n        params={\n            'where': f\"OpenedDateTime >= DATE '{startYear.strftime('%Y-%m-%d')}' AND OpenedDateTime < '{nextMonth.strftime('%Y-%m-%d')}'\",\n            'outFields': '*',\n            'f': 'json',\n            'resultOffset': offset,\n            'resultRecordCount': page_size\n        }\n        \n        \n        response=requests.get(url, params=params)\n        data=response.json()\n\n        features=data.get('features', [])\n        \n        if not features: \n            print('no features')\n            cont=False\n            break\n\n        attributes=[f.get('attributes',{}) for f in features]\n\n        df=spark.createDataFrame(attributes, schema=callSchema)\n        df=df.withColumn('opened_ts', f.to_timestamp(f.from_unixtime(f.col('OpenedDateTime')/1000))).withColumn('year_month', f.date_format(f.col('opened_ts'), 'yyyy-MM'))\n        df.write.mode('append').partitionBy('year_month').parquet('s3://sanantonio-311-calls/bronze/')\n        if not data.get('exceededTransferLimit', False): \n            break\n\n        offset+=len(features)\n        \n    startYear = startYear + relativedelta(months=1)",
+				"metadata": {},
+				"execution_count": null,
+				"outputs": []
+			}
+		]
+	}
+}
