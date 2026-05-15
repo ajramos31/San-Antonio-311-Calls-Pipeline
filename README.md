@@ -15,9 +15,5 @@ Data transformation and cleansing logic are integrated into the pipeline to stan
 Another key focus of the project is operational observability through metadata management. The pipeline captures execution-level metadata such as ingestion timestamps, batch statistics, processed record counts, execution durations, and data quality indicators. Maintaining this metadata provides traceability and auditing capabilities that are critical in production data platforms for monitoring pipeline health, troubleshooting failures, and validating ingestion completeness.
 
 The overall architecture was designed to emulate real-world data engineering workflows commonly found in modern cloud analytics ecosystems. The project demonstrates practical understanding of scalable pipeline orchestration, incremental processing strategies, fault-tolerant ingestion design, and maintainable ETL development practices. It serves both as a technical learning exercise and as a portfolio project showcasing core competencies in data engineering, distributed data processing concepts, and production-oriented pipeline architecture.
-For questions or issues, please reach out to [ajramos31](https://github.com/ajramos31).
 
-## Acknowledgments
 
-- San Antonio 311 Calls Database
-- Data engineering best practices community
